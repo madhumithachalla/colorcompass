@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ColorCompass — AI Personal Style & Colour Analysis | Madhumitha Challa</title>
+<meta name="description" content="Upload a selfie and get your personal colour season, 28+ outfit ideas, makeup guide, hair & glasses recommendations, climate-aware styling and 30+ brand suggestions. All client-side. By Madhumitha Challa.">
+<meta name="keywords" content="colour analysis, personal style, fashion AI, deep autumn, warm spring, cool winter, outfit generator, Melbourne style">
+<meta property="og:title" content="ColorCompass — AI Personal Style Analysis">
+<meta property="og:description" content="Upload a selfie, get a personal colour season, outfit guide and weather-aware styling.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✨</text></svg>">
+<style>
+  :root { --rose: #b5294e; --rose-light: #fce4ec; --cream: #faf7f1; --dark: #2a1810; --muted: #666; --bg: #fdf6f9; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--dark); line-height: 1.5; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 16px 60px; }
+  .hero { background: linear-gradient(135deg, #b5294e, #e91e8c); color: white; padding: 40px 20px 48px; text-align: center; position: relative; }
+  .hero h1 { font-size: 34px; font-weight: 900; letter-spacing: -1px; }
+  .hero .tag { font-size: 14px; opacity: 0.9; margin-top: 8px; }
+  .hero .by { font-size: 12px; opacity: 0.75; margin-top: 14px; }
+  .hero .by a { color: white; text-decoration: underline; }
+  .hero-badges { display: flex; justify-content: center; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+  .hero-badges span { background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+
+  /* AVATAR GUIDE */
+  .avatar-strip { background: white; border-radius: 20px; padding: 16px; margin: -30px 16px 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); border: 1px solid #f5dde8; position: relative; z-index: 2; }
+  .avatar-head { font-size: 13px; font-weight: 800; color: var(--rose); margin-bottom: 12px; letter-spacing: 1px; text-align: center; }
+  .avatar-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .av-step { text-align: center; }
+  .av-circle { width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #ffe6f0, #fff4e6); margin: 0 auto 6px; display: flex; align-items: center; justify-content: center; border: 2px solid #f5dde8; position: relative; }
+  .av-num { position: absolute; top: -4px; right: -4px; background: var(--rose); color: white; width: 20px; height: 20px; border-radius: 50%; font-size: 10px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+  .av-label { font-size: 10px; font-weight: 700; color: var(--dark); line-height: 1.3; }
+  .av-tip { font-size: 10px; color: var(--muted); margin-top: 2px; line-height: 1.2; }
+
+  .upload { background: white; border-radius: 20px; padding: 24px; margin: 0 16px 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); border: 1px solid #f5dde8; }
+  .upload h2 { font-size: 18px; color: var(--rose); font-weight: 800; margin-bottom: 6px; }
+  .upload p { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+
+  .tips-box { background: #fff8ec; border: 1px solid #ffd5a0; border-radius: 12px; padding: 12px; margin-bottom: 14px; }
+  .tips-box .th { font-size: 11px; font-weight: 800; color: #b86e00; margin-bottom: 6px; letter-spacing: 1px; }
+  .tips-box ul { list-style: none; padding: 0; }
+  .tips-box li { font-size: 12px; color: #555; padding: 3px 0 3px 20px; position: relative; line-height: 1.4; }
+  .tips-box li::before { content: '✓'; position: absolute; left: 0; color: #2e7d32; font-weight: 900; }
+  .tips-box li.bad::before { content: '✗'; color: #c41e3a; }
+
+  .drop { border: 2px dashed #e5c7d5; border-radius: 16px; padding: 28px 16px; text-align: center; cursor: pointer; background: #fdf6f9; display: block; }
+  .drop.has-image { padding: 10px; border-style: solid; }
+  .drop .ico { font-size: 36px; margin-bottom: 6px; }
+  .drop .pri { font-size: 14px; font-weight: 700; color: var(--dark); }
+  .drop .sec { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .drop img { max-width: 100%; max-height: 320px; border-radius: 12px; }
+  .drop input { display: none; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; }
+  .actions button { flex: 1; padding: 12px; border: none; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .btn-primary { background: var(--rose); color: white; }
+  .btn-primary:disabled { background: #d9b3c0; cursor: not-allowed; }
+  .btn-secondary { background: white; color: var(--rose); border: 1px solid var(--rose) !important; }
+  .ambient { font-size: 11px; color: #999; margin-top: 12px; text-align: center; font-style: italic; }
+
+  .wx { background: white; border-radius: 20px; padding: 20px; margin: 0 16px 16px; border: 1px solid #f5dde8; box-shadow: 0 2px 12px rgba(0,0,0,0.05); }
+  .wx h3 { font-size: 14px; color: var(--rose); font-weight: 800; margin-bottom: 10px; }
+  .wx-row { display: flex; gap: 8px; }
+  .wx-row input { flex: 1; padding: 11px 14px; border: 1px solid #e5c7d5; border-radius: 10px; font-size: 13px; background: #fdf6f9; }
+  .wx-row button { padding: 11px 20px; background: var(--rose); color: white; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; }
+  .wx-use-loc { font-size: 11px; color: var(--rose); margin-top: 8px; cursor: pointer; display: inline-block; }
+  .wx-result { margin-top: 14px; padding: 14px; background: linear-gradient(135deg, #fff4e6, #ffe6f0); border-radius: 14px; display: none; }
+  .wx-result.show { display: block; }
+  .wx-temp { font-size: 28px; font-weight: 900; color: var(--rose); }
+  .wx-loc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .wx-cond { font-size: 13px; margin-top: 6px; }
+  .wx-outfit { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e5c7d5; font-size: 13px; line-height: 1.5; }
+  .wx-outfit strong { color: var(--rose); }
+
+  .specs { background: white; border-radius: 20px; padding: 20px; margin: 0 16px 16px; border: 1px solid #f5dde8; }
+  .specs h3 { font-size: 14px; color: var(--rose); font-weight: 800; margin-bottom: 12px; letter-spacing: 1px; }
+  .spec-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .spec-tile { background: linear-gradient(135deg, #fff4e6, #ffe6f0); border-radius: 10px; padding: 10px 8px; text-align: center; }
+  .spec-tile .num { font-size: 20px; font-weight: 900; color: var(--rose); }
+  .spec-tile .lbl { font-size: 9px; font-weight: 700; color: var(--dark); margin-top: 2px; letter-spacing: 0.5px; }
+
+  .results { padding: 0 16px; }
+  .results.hidden { display: none; }
+  .season { background: linear-gradient(135deg, #b5294e, #d81b60); color: white; border-radius: 20px; padding: 22px; margin-bottom: 16px; }
+  .season .tl { font-size: 11px; letter-spacing: 2px; opacity: 0.75; font-weight: 700; }
+  .season .nm { font-size: 30px; font-weight: 900; margin: 4px 0; }
+  .season .sb { font-size: 14px; opacity: 0.9; }
+  .season .tgs { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .season .tg { background: rgba(255,255,255,0.2); border-radius: 10px; padding: 6px 12px; }
+  .season .tg .l { font-size: 10px; opacity: 0.8; }
+  .season .tg .v { font-size: 13px; font-weight: 700; }
+
+  .tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 10px; -webkit-overflow-scrolling: touch; }
+  .tab { flex-shrink: 0; padding: 10px 16px; border-radius: 20px; border: none; font-weight: 700; font-size: 12px; cursor: pointer; background: white; color: var(--muted); box-shadow: 0 2px 8px rgba(0,0,0,0.08); white-space: nowrap; }
+  .tab.active { background: var(--rose); color: white; }
+
+  .sec { background: white; border-radius: 18px; padding: 20px; margin-bottom: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); border: 1px solid #f5dde8; display: none; }
+  .sec.vis { display: block; }
+  .st { font-size: 16px; font-weight: 800; color: var(--rose); margin-bottom: 14px; }
+  .sl { font-size: 11px; font-weight: 700; color: #aaa; letter-spacing: 1px; margin: 14px 0 8px; }
+  .sw { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+  .dot { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .dot .c { width: 44px; height: 44px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+  .dot .n { font-size: 10px; color: var(--muted); text-align: center; max-width: 60px; line-height: 1.2; }
+  .dot .h { font-size: 9px; color: #aaa; font-family: monospace; }
+  .avoid-x { position: relative; }
+  .avoid-x::after { content: '✕'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #c41e3a; font-weight: 900; text-shadow: 0 1px 3px rgba(255,255,255,0.8); }
+  .row { display: flex; gap: 10px; margin-bottom: 8px; }
+  .row .rl { font-size: 11px; font-weight: 700; color: #999; min-width: 110px; }
+  .row .rv { font-size: 13px; color: #333; line-height: 1.5; }
+  .outfit-card { background: var(--cream); border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid #e8dcc9; }
+  .outfit-card .on { font-size: 13px; font-weight: 800; color: var(--dark); margin-bottom: 4px; }
+  .outfit-card .od { font-size: 12px; color: #555; line-height: 1.5; }
+  .outfit-card .ocp { margin-top: 6px; }
+  .pill { background: white; border-radius: 8px; padding: 4px 10px; font-size: 10px; color: #555; font-weight: 700; border: 1px solid #f0dcc9; display: inline-block; margin: 2px 4px 2px 0; }
+  .pill.strong { background: var(--rose); color: white; border-color: var(--rose); }
+  .brand-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .brand-card { background: var(--cream); border-radius: 10px; padding: 10px; border: 1px solid #e8dcc9; }
+  .brand-card .bn { font-size: 12px; font-weight: 800; color: var(--dark); }
+  .brand-card .bp { font-size: 10px; color: var(--rose); font-weight: 700; margin: 2px 0; }
+  .brand-card .bw { font-size: 10px; color: #666; line-height: 1.3; }
+  .starter-box { background: linear-gradient(135deg, #fff4e6, #ffe6f0); border-radius: 14px; padding: 14px; margin-bottom: 10px; border: 1px solid #ffd5c0; }
+  .starter-box .sbt { font-size: 13px; font-weight: 800; color: var(--rose); margin-bottom: 6px; }
+  .starter-box .sbb { font-size: 12px; color: #444; line-height: 1.6; }
+  .checklist { margin-top: 8px; }
+  .checklist div { padding: 6px 0; font-size: 12px; color: #333; display: flex; gap: 8px; }
+  .checklist div::before { content: '☐'; color: var(--rose); font-weight: 900; flex-shrink: 0; }
+  .numbered-step { background: white; border-radius: 12px; padding: 12px; margin-bottom: 10px; border-left: 4px solid var(--rose); }
+  .numbered-step .nsh { font-size: 13px; font-weight: 800; color: var(--dark); margin-bottom: 4px; display: flex; gap: 8px; align-items: center; }
+  .numbered-step .num { background: var(--rose); color: white; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; flex-shrink: 0; }
+  .numbered-step .nsb { font-size: 12px; color: #555; line-height: 1.5; padding-left: 30px; }
+  .zn { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #fce4ec; }
+  .zn:last-child { border-bottom: none; }
+  .zn .zl { font-size: 12px; font-weight: 800; color: var(--rose); margin-bottom: 4px; }
+  .zn .zv { font-size: 13px; color: #444; line-height: 1.5; }
+  .glasses-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .glass-card { background: var(--cream); border-radius: 12px; padding: 10px; border: 1px solid #e8dcc9; }
+  .glass-svg { width: 100%; height: 50px; margin-bottom: 6px; }
+  .glass-name { font-size: 12px; font-weight: 700; color: var(--dark); }
+  .glass-why { font-size: 11px; color: #666; margin-top: 2px; line-height: 1.3; }
+  .glass-tag { display: inline-block; background: var(--rose); color: white; font-size: 9px; padding: 2px 6px; border-radius: 6px; margin-top: 4px; font-weight: 700; }
+  .climate-card { background: linear-gradient(135deg, #fff4e6, #ffe6f0); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+  .climate-card .chd { font-size: 13px; font-weight: 800; color: var(--rose); margin-bottom: 8px; }
+  .climate-card .cbody { font-size: 12px; color: #444; line-height: 1.5; }
+  .climate-card .fabric-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .fab { background: white; border-radius: 8px; padding: 4px 10px; font-size: 10px; color: #555; font-weight: 700; border: 1px solid #f0dcc9; }
+  .analyzing { text-align: center; padding: 40px 20px; }
+  .analyzing .spin { width: 48px; height: 48px; border: 4px solid var(--rose-light); border-top-color: var(--rose); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+  .analyzing p { color: var(--rose); font-weight: 700; font-size: 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .footer { text-align: center; padding: 30px 16px; color: var(--muted); font-size: 12px; }
+  .footer a { color: var(--rose); text-decoration: none; font-weight: 700; }
+  .ag { background: var(--rose-light); color: var(--rose); border-radius: 20px; padding: 6px 14px; font-size: 13px; font-weight: 800; display: inline-block; margin: 4px; }
+  .save-btn { background: white; color: var(--rose); border: 1px solid var(--rose); padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>✨ ColorCompass</h1>
+  <div class="tag">AI-powered personal colour, style & climate styling</div>
+  <div class="hero-badges">
+    <span>🔒 PRIVATE</span>
+    <span>⚡ INSTANT</span>
+    <span>🆓 NO ACCOUNT</span>
+    <span>📱 MOBILE READY</span>
+  </div>
+  <div class="by">A project by <a href="https://madhumithachalla.github.io/">Madhumitha Challa</a></div>
+</div>
+
+<div class="wrap">
+
+  <!-- AVATAR GUIDE -->
+  <div class="avatar-strip">
+    <div class="avatar-head">👩 HOW TO GET THE BEST RESULT</div>
+    <div class="avatar-steps">
+      <div class="av-step">
+        <div class="av-circle">
+          <svg width="40" height="40" viewBox="0 0 40 40"><ellipse cx="20" cy="18" rx="11" ry="13" fill="#f5e0c9"/><path d="M 10 15 Q 20 5 30 15 Q 30 10 20 7 Q 10 10 10 15" fill="#2a1810"/><circle cx="16" cy="19" r="1.5" fill="#2a1810"/><circle cx="24" cy="19" r="1.5" fill="#2a1810"/><path d="M 17 25 Q 20 27 23 25" fill="none" stroke="#2a1810" stroke-width="1"/><rect x="12" y="30" width="16" height="8" rx="3" fill="#f5ecd7"/></svg>
+          <div class="av-num">1</div>
+        </div>
+        <div class="av-label">Natural Light</div>
+        <div class="av-tip">Near a window, daytime</div>
+      </div>
+      <div class="av-step">
+        <div class="av-circle">
+          <svg width="40" height="40" viewBox="0 0 40 40"><ellipse cx="20" cy="18" rx="11" ry="13" fill="#f5e0c9"/><ellipse cx="20" cy="20" rx="13" ry="15" fill="none" stroke="#b5294e" stroke-width="1.5" stroke-dasharray="2,2"/><circle cx="16" cy="19" r="1.5" fill="#2a1810"/><circle cx="24" cy="19" r="1.5" fill="#2a1810"/></svg>
+          <div class="av-num">2</div>
+        </div>
+        <div class="av-label">Face Centered</div>
+        <div class="av-tip">Front-facing, no tilt</div>
+      </div>
+      <div class="av-step">
+        <div class="av-circle">
+          <svg width="40" height="40" viewBox="0 0 40 40"><ellipse cx="20" cy="18" rx="11" ry="13" fill="#f5e0c9"/><circle cx="16" cy="19" r="1.5" fill="#2a1810"/><circle cx="24" cy="19" r="1.5" fill="#2a1810"/><path d="M 17 25 Q 20 26 23 25" fill="none" stroke="#2a1810" stroke-width="1"/><text x="20" y="36" text-anchor="middle" font-size="8" fill="#2a1810">👄</text></svg>
+          <div class="av-num">3</div>
+        </div>
+        <div class="av-label">Bare Face</div>
+        <div class="av-tip">Minimal makeup</div>
+      </div>
+      <div class="av-step">
+        <div class="av-circle">
+          <svg width="40" height="40" viewBox="0 0 40 40"><rect x="4" y="4" width="32" height="32" rx="4" fill="none" stroke="#b5294e" stroke-width="1.5"/><text x="20" y="26" text-anchor="middle" font-size="16">🚫</text></svg>
+          <div class="av-num">4</div>
+        </div>
+        <div class="av-label">No Filters</div>
+        <div class="av-tip">Raw selfie only</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="upload">
+    <h2>📸 Upload Your Photo</h2>
+    <p>Your photo stays in your browser. Nothing is uploaded to any server.</p>
+
+    <div class="tips-box">
+      <div class="th">✨ TIPS FOR ACCURATE ANALYSIS</div>
+      <ul>
+        <li>Shoot in natural daylight near a window</li>
+        <li>Face the camera straight-on, no angle</li>
+        <li>Pull hair back so face is fully visible</li>
+        <li>Wear a neutral top (white/grey/black)</li>
+        <li class="bad">Avoid Instagram/Snapchat filters</li>
+        <li class="bad">Avoid heavy makeup or sunglasses</li>
+      </ul>
+    </div>
+
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept="image/*">
+      <div id="dropContent">
+        <div class="ico">📷</div>
+        <div class="pri">Tap to choose photo or take selfie</div>
+        <div class="sec">Camera on mobile · Photo browser on desktop</div>
+      </div>
+    </label>
+    <div class="actions">
+      <button class="btn-secondary" onclick="document.getElementById('file').click()">Choose Different</button>
+      <button class="btn-primary" id="analyzeBtn" onclick="analyze()" disabled>Analyse Me ✦</button>
+    </div>
+    <p class="ambient">🔒 100% client-side. Powered by Canvas API + Open-Meteo.</p>
+  </div>
+
+  <div class="wx">
+    <h3>🌤️ WEATHER-AWARE OUTFIT HELPER</h3>
+    <div class="wx-row">
+      <input type="text" id="loc" placeholder="City, suburb or postcode">
+      <button onclick="getWeather()">Check</button>
+    </div>
+    <span class="wx-use-loc" onclick="useMyLocation()">📍 Use my current location</span>
+    <div id="wxResult" class="wx-result"></div>
+  </div>
+
+  <div class="specs">
+    <h3>📊 WHAT YOU GET</h3>
+    <div class="spec-grid">
+      <div class="spec-tile"><div class="num">12</div><div class="lbl">TABS</div></div>
+      <div class="spec-tile"><div class="num">6</div><div class="lbl">SEASONS</div></div>
+      <div class="spec-tile"><div class="num">28+</div><div class="lbl">OUTFITS</div></div>
+      <div class="spec-tile"><div class="num">30+</div><div class="lbl">BRANDS</div></div>
+      <div class="spec-tile"><div class="num">7</div><div class="lbl">CLIMATES</div></div>
+      <div class="spec-tile"><div class="num">4</div><div class="lbl">FRAME STYLES</div></div>
+      <div class="spec-tile"><div class="num">LIVE</div><div class="lbl">WEATHER</div></div>
+      <div class="spec-tile"><div class="num">100%</div><div class="lbl">PRIVATE</div></div>
+    </div>
+  </div>
+
+  <div class="results hidden" id="results"></div>
+</div>
+
+<div class="footer">
+  Built with 💗 by <a href="https://madhumithachalla.github.io/">Madhumitha Challa</a> · Oct 2026<br>
+  <small>Pure client-side · No backend · No tracking · <a href="https://github.com/madhumithachalla/colorcompass">GitHub</a></small>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -14,25 +14,47 @@ document.getElementById('file').addEventListener('change', e => {
     document.getElementById('dropContent').innerHTML = '<img src="' + currentImage + '">';
     document.getElementById('analyzeBtn').disabled = false;
   };
+  r.onerror = () => {
+    document.getElementById('dropContent').innerHTML = '<p style="color:#c41e3a; font-size:13px;">Couldn\'t read that file — try a different photo.</p>';
+  };
   r.readAsDataURL(f);
 });
+
+function showAnalysisError(message) {
+  const results = document.getElementById('results');
+  results.innerHTML = `<div class="sec vis analyzing"><p style="color:#c41e3a; font-weight:700;">⚠️ ${message}</p><p style="font-size:12px; color:#666; margin-top:8px;">Try a plain JPEG or PNG photo (not HEIC/Live Photo), or a different image.</p></div>`;
+}
 
 async function analyze() {
   const results = document.getElementById('results');
   results.classList.remove('hidden');
   results.innerHTML = '<div class="sec vis analyzing"><div class="spin"></div><p>Analysing your coloring, features & undertone...</p></div>';
   results.scrollIntoView({ behavior: 'smooth' });
+
   const img = new Image();
+  const timeout = setTimeout(() => {
+    showAnalysisError("This is taking too long — your browser may not be able to decode this photo's format.");
+  }, 8000);
+
   img.onload = () => {
-    const canvas = document.createElement('canvas');
-    const scale = Math.min(400 / img.width, 400 / img.height, 1);
-    canvas.width = img.width * scale; canvas.height = img.height * scale;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const skin = sampleRegion(ctx, canvas.width * 0.4, canvas.height * 0.5, canvas.width * 0.2, canvas.height * 0.15);
-    const hair = sampleRegion(ctx, canvas.width * 0.3, canvas.height * 0.08, canvas.width * 0.4, canvas.height * 0.12);
-    currentAnalysis = diagnose(skin, hair);
-    renderResults(currentAnalysis);
+    clearTimeout(timeout);
+    try {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(400 / img.width, 400 / img.height, 1);
+      canvas.width = img.width * scale; canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const skin = sampleRegion(ctx, canvas.width * 0.4, canvas.height * 0.5, canvas.width * 0.2, canvas.height * 0.15);
+      const hair = sampleRegion(ctx, canvas.width * 0.3, canvas.height * 0.08, canvas.width * 0.4, canvas.height * 0.12);
+      currentAnalysis = diagnose(skin, hair);
+      renderResults(currentAnalysis);
+    } catch (e) {
+      showAnalysisError("Something went wrong reading that photo (" + e.message + ").");
+    }
+  };
+  img.onerror = () => {
+    clearTimeout(timeout);
+    showAnalysisError("Your browser couldn't open this photo — it may be in a format (like HEIC) it doesn't support.");
   };
   img.src = currentImage;
 }

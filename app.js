@@ -20,6 +20,45 @@ document.getElementById('file').addEventListener('change', e => {
   r.readAsDataURL(f);
 });
 
+// Live in-page camera, via getUserMedia, as an alternative to the native
+// file-input camera picker. The <input capture> approach above works in
+// real mobile browsers (Chrome, Safari) but many in-app browsers (opened
+// from a chat app, social app, etc.) ignore the capture attribute entirely
+// and only show a gallery picker - this gives those users a working camera
+// option too, wherever getUserMedia itself is permitted.
+let cameraStream = null;
+
+async function startCamera() {
+  const note = document.getElementById('cameraFallbackNote');
+  note.style.display = 'none';
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+    document.getElementById('cameraVideo').srcObject = cameraStream;
+    document.getElementById('cameraLive').style.display = 'block';
+    document.getElementById('drop').style.display = 'none';
+  } catch (e) {
+    note.style.display = 'block';
+  }
+}
+
+function stopCamera() {
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  document.getElementById('cameraLive').style.display = 'none';
+  document.getElementById('drop').style.display = 'block';
+}
+
+function snapPhoto() {
+  const video = document.getElementById('cameraVideo');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  currentImage = canvas.toDataURL('image/jpeg', 0.92);
+  stopCamera();
+  document.getElementById('drop').classList.add('has-image');
+  document.getElementById('dropContent').innerHTML = '<img src="' + currentImage + '">';
+  document.getElementById('analyzeBtn').disabled = false;
+}
+
 function showAnalysisError(message) {
   const results = document.getElementById('results');
   results.innerHTML = `<div class="sec vis analyzing"><p style="color:#c41e3a; font-weight:700;">⚠️ ${message}</p><p style="font-size:12px; color:#666; margin-top:8px;">Try a plain JPEG or PNG photo (not HEIC/Live Photo), or a different image.</p></div>`;
@@ -130,8 +169,24 @@ function seasonExplainer(a) {
     Medium: 'your overall colouring sits in the mid-range between light and deep, giving you flexibility toward both richer and lighter shades within your warm/cool family',
     Light: 'your overall colouring reads as light rather than deep, so softer, lighter shades stay in proportion instead of overwhelming your natural colouring'
   }[a.depth];
-  return `You're a <strong>${a.season}</strong> (${a.sub}). In plain terms: ${warmText}; ${contrastText}; and ${depthText}. Every colour below is chosen for sitting on your side of the wheel at a depth and contrast that match how you actually look — that's the whole idea behind seasonal colour theory, not just "these are nice colours."`;
+  return `You're a <strong>${a.season}</strong> (${a.sub}). In plain terms: ${warmText}; ${contrastText}; and ${depthText}. Every colour below is chosen for sitting on your side of the wheel at a depth and contrast that match how you actually look — that's the whole idea behind seasonal colour theory: find the colours whose warmth, depth and contrast echo your own, rather than picking "nice colours" at random. A colour that's technically pretty can still fight your natural colouring if it's the wrong temperature or the wrong depth for you; a colour that looks plain on its own can look great once it's matched to your wheel position.`;
 }
+
+// Celebrities commonly cited for each season in seasonal-colour-analysis
+// communities. This is pop-culture consensus, not a verified classification
+// - different colour analysts place the same person in different seasons,
+// and public figures change their hair/makeup, so treat these as "a famous
+// face with roughly this colouring" rather than a fact about that person.
+const SEASON_CELEBRITIES = {
+  'Deep Autumn': ['Julia Roberts', 'Jennifer Lopez'],
+  'Warm Spring': ['Blake Lively', 'Nicole Kidman'],
+  'Deep Winter': ['Anne Hathaway', 'Lucy Liu'],
+  'Light Summer': ['Reese Witherspoon', 'Cameron Diaz'],
+  'True Autumn': ['Jessica Chastain', 'Julianne Moore'],
+  'True Winter': ['Megan Fox', 'Liv Tyler']
+};
+
+const ACCURACY_NOTE = "How accurate is this: this tool estimates your season from the average pixel colour of two small regions of your photo (a patch of skin, a patch of hair) — it's a genuine, real measurement of your actual photo, not a random guess, but it's a simple heuristic, not professional colour draping under controlled lighting. Your photo's white balance, lighting colour and camera processing all shift the numbers, which is why the tips above (natural daylight, no filters, neutral top) matter: they're not just nice-to-haves, they're what makes the measurement trustworthy. Treat the season below as a well-reasoned starting point to experiment from, not a lab-verified diagnosis.";
 
 function paletteFor(season) {
   const P = {
@@ -383,10 +438,15 @@ function renderResults(a) {
 
     <div id="t-color" class="sec">
       <div class="st">🎨 Your Colour Palette</div>
-      <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-bottom:16px; padding:14px; background:var(--rose-light); border-radius:12px;">
+      <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-bottom:12px; padding:14px; background:var(--rose-light); border-radius:12px;">
         <div style="flex:none;">${colorWheelSVG(a.warm)}</div>
         <p style="flex:1; min-width:180px; font-size:13px; color:#444; line-height:1.6; margin:0;">${seasonExplainer(a)}</p>
       </div>
+      <div style="padding:12px 14px; background:var(--cream); border-radius:12px; margin-bottom:12px; border:1px solid #e8dcc9;">
+        <div style="font-size:11px; font-weight:800; color:var(--rose); letter-spacing:1px; margin-bottom:4px;">SIMILAR COLOURING, FOR REFERENCE</div>
+        <div style="font-size:13px; color:#444; line-height:1.5;">${(SEASON_CELEBRITIES[a.season] || []).join(' · ')} are commonly cited in colour-analysis communities as ${a.season} examples — this is pop-culture consensus, not a verified fact about them, and different analysts categorise the same person differently.</div>
+      </div>
+      <div style="padding:12px 14px; background:#fff8ec; border-radius:12px; margin-bottom:16px; border:1px solid #ffd5a0; font-size:12.5px; color:#555; line-height:1.6;">${ACCURACY_NOTE}</div>
       <div class="sl">BEST CLOTHING COLOURS</div>
       <div class="sw">${p.best.map(c => `<div class="dot"><div class="c" style="background:${c[0]}"></div><div class="n">${c[1]}</div><div class="h">${c[0]}</div></div>`).join('')}</div>
       <div class="sl">NEUTRALS</div>

@@ -69,6 +69,48 @@ function diagnose(skin, hair) {
   };
 }
 
+// 12-hue colour wheel, split into the warm half (reds/oranges/yellows) and
+// cool half (greens/blues/violets) that seasonal colour theory is built on.
+// Your season's half is outlined; the rest fades back so it reads at a glance.
+const WARM_HUES = new Set([330, 0, 30, 60, 90]);
+function colorWheelSVG(warm) {
+  const cx = 70, cy = 70, rOuter = 62, rInner = 30;
+  const toRad = d => (d - 90) * Math.PI / 180;
+  const point = (r, deg) => [cx + r * Math.cos(toRad(deg)), cy + r * Math.sin(toRad(deg))];
+  let wedges = '';
+  for (let h = 0; h < 360; h += 30) {
+    const isWarmWedge = WARM_HUES.has(h);
+    const active = isWarmWedge === warm;
+    const [x1, y1] = point(rOuter, h), [x2, y2] = point(rOuter, h + 30);
+    const [x3, y3] = point(rInner, h + 30), [x4, y4] = point(rInner, h);
+    const path = `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 0 1 ${x2} ${y2} L ${x3} ${y3} A ${rInner} ${rInner} 0 0 0 ${x4} ${y4} Z`;
+    wedges += `<path d="${path}" fill="hsl(${h},70%,55%)" opacity="${active ? 1 : 0.22}" stroke="#fff" stroke-width="1.5"/>`;
+  }
+  const label = warm ? 'WARM' : 'COOL';
+  return `<svg viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="Colour wheel, ${label.toLowerCase()} half highlighted">
+    ${wedges}
+    <circle cx="${cx}" cy="${cy}" r="${rInner - 2}" fill="#fff"/>
+    <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="12" font-weight="800" fill="#333">${label}</text>
+  </svg>`;
+}
+
+function seasonExplainer(a) {
+  const warmText = a.warm
+    ? 'your undertone sits on the warm half of the wheel (reds, oranges and golden yellows) rather than the cool half (blues, greens and violets)'
+    : 'your undertone sits on the cool half of the wheel (blues, greens and violets) rather than the warm half (reds, oranges and golden yellows)';
+  const contrastText = {
+    High: 'your skin and hair are far apart in brightness, so bold, clear colours and strong combinations (like a deep neutral with a bright accent) read as flattering rather than harsh',
+    Medium: 'your skin and hair sit a medium distance apart in brightness, so moderately rich, blended colours work better than either pastels or stark high-contrast pairings',
+    Low: 'your skin and hair are close together in brightness, so soft, blended, low-contrast colour combinations flatter you more than anything stark or high-contrast'
+  }[a.contrast];
+  const depthText = {
+    Deep: 'your overall colouring reads as deep rather than light, so rich, saturated shades hold their own against your natural depth instead of washing out',
+    Medium: 'your overall colouring sits in the mid-range between light and deep, giving you flexibility toward both richer and lighter shades within your warm/cool family',
+    Light: 'your overall colouring reads as light rather than deep, so softer, lighter shades stay in proportion instead of overwhelming your natural colouring'
+  }[a.depth];
+  return `You're a <strong>${a.season}</strong> (${a.sub}). In plain terms: ${warmText}; ${contrastText}; and ${depthText}. Every colour below is chosen for sitting on your side of the wheel at a depth and contrast that match how you actually look — that's the whole idea behind seasonal colour theory, not just "these are nice colours."`;
+}
+
 function paletteFor(season) {
   const P = {
     'Deep Autumn': {
@@ -319,6 +361,10 @@ function renderResults(a) {
 
     <div id="t-color" class="sec">
       <div class="st">🎨 Your Colour Palette</div>
+      <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-bottom:16px; padding:14px; background:var(--rose-light); border-radius:12px;">
+        <div style="flex:none;">${colorWheelSVG(a.warm)}</div>
+        <p style="flex:1; min-width:180px; font-size:13px; color:#444; line-height:1.6; margin:0;">${seasonExplainer(a)}</p>
+      </div>
       <div class="sl">BEST CLOTHING COLOURS</div>
       <div class="sw">${p.best.map(c => `<div class="dot"><div class="c" style="background:${c[0]}"></div><div class="n">${c[1]}</div><div class="h">${c[0]}</div></div>`).join('')}</div>
       <div class="sl">NEUTRALS</div>
@@ -501,7 +547,8 @@ function renderResults(a) {
 }
 
 function casualOutfits(p, m) {
-  const h1 = p.best[0][1], h2 = p.best[2][1], h3 = p.best[3][1], n2 = p.neutrals[4][1];
+  const h1 = p.best[0][1], h2 = p.best[2][1], h3 = p.best[3][1];
+  const n2 = (p.neutrals[4] || p.neutrals[p.neutrals.length - 1])[1];
   return [
     { n: '1. Coffee Run', d: `${n2} oversized tee + dark denim + cognac sneakers. ${m} hoops.`, p: [n2, 'Dark denim', 'Cognac', {t:`${m} hoops`, strong:true}] },
     { n: '2. Uni / Study', d: `${h3} utility jacket over ${h1} knit, straight jeans, cream sneakers.`, p: [h3, h1, 'Dark denim'] },

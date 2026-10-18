@@ -105,51 +105,115 @@ function sampleRegion(ctx, x, y, w, h) {
   return { r: r/count, g: g/count, b: b/count };
 }
 
+// RGB -> HSL: the actual colour-wheel coordinates (hue = angle around the
+// wheel, saturation = distance from the centre/grey axis = "clarity",
+// lightness = the light<->deep axis). Everything below is computed from
+// these three real values, not arbitrary RGB arithmetic.
+function rgbToHsl({ r, g, b }) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h;
+  switch (max) {
+    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+    case g: h = (b - r) / d + 2; break;
+    default: h = (r - g) / d + 4;
+  }
+  return { h: h * 60, s, l };
+}
+
+// Real human skin hue (regardless of undertone) always falls in a narrow
+// reddish-orange-yellow band - roughly hue 340°-360° through 0°-60° - never
+// spread across the full 360° wheel the way a generic "warm half vs cool
+// half" split (centred on orange vs centred on blue) assumes. So the usual
+// "which 180° hemisphere" rule is wrong here: every real skin tone would
+// land on the "warm" side of that generic split, warm and cool undertones
+// included, which defeats the point. What actually separates a warm from a
+// cool undertone is a much narrower distinction *within* that band: more
+// toward orange/yellow (higher hue, within the band) reads warm; more
+// toward red/pink (lower hue, or wrapped-around toward magenta) reads cool.
+// SKIN_HUE_THRESHOLD is that boundary, calibrated to sit roughly where
+// "gold/peach" shifts into "rose/pink" on a real face.
+const SKIN_HUE_THRESHOLD = 25;
+function skinHueOffset(h) { return h > 200 ? h - 360 : h; } // unwraps reds/pinks near 360° to negative, so the whole realistic skin-hue band sits on one continuous line
+function isWarmSkinTone(h) { return skinHueOffset(h) > SKIN_HUE_THRESHOLD; }
+
 function diagnose(skin, hair) {
-  const sb = (skin.r + skin.g + skin.b) / 3;
-  const hb = (hair.r + hair.g + hair.b) / 3;
-  const warmth = (skin.r + skin.g) / 2 - skin.b;
-  const contrast = Math.abs(sb - hb);
-  const warm = warmth > 15;
-  const deep = sb < 160;
-  const highC = contrast > 60;
+  const sHsl = rgbToHsl(skin), hHsl = rgbToHsl(hair);
+  const warm = isWarmSkinTone(sHsl.h);
+  const lightContrast = Math.abs(sHsl.l - hHsl.l);
+  const depthBucket = sHsl.l >= 0.62 ? 'Light' : sHsl.l < 0.45 ? 'Deep' : 'Medium';
+  const contrastBucket = lightContrast > 0.22 ? 'High' : lightContrast < 0.10 ? 'Low' : 'Medium';
+  const clarityBucket = sHsl.s >= 0.45 ? 'Clear' : sHsl.s < 0.28 ? 'Soft' : 'True';
+  const isDeepFamily = depthBucket !== 'Light';
+
   let season, sub;
-  if (warm && deep && highC) { season='Deep Autumn'; sub='Warm · Muted-Rich · High Contrast'; }
-  else if (warm && !deep) { season='Warm Spring'; sub='Warm · Bright · Medium Contrast'; }
-  else if (!warm && deep && highC) { season='Deep Winter'; sub='Cool · Clear · High Contrast'; }
-  else if (!warm && !deep) { season='Light Summer'; sub='Cool · Muted · Low Contrast'; }
-  else if (warm && deep) { season='True Autumn'; sub='Warm · Muted · Medium Contrast'; }
-  else { season='True Winter'; sub='Cool · Clear · High Contrast'; }
+  if (warm && !isDeepFamily) {
+    // Spring family: warm + light
+    if (clarityBucket === 'Clear') { season = 'Clear Spring'; sub = 'Warm · Clear · Bright'; }
+    else if (clarityBucket === 'Soft') { season = 'Light Spring'; sub = 'Warm · Soft · Light'; }
+    else { season = 'Warm Spring'; sub = 'Warm · True · Medium Contrast'; }
+  } else if (warm && isDeepFamily) {
+    // Autumn family: warm + medium/deep
+    if (clarityBucket === 'Soft') { season = 'Soft Autumn'; sub = 'Warm · Muted · Soft'; }
+    else if (depthBucket === 'Deep' && contrastBucket === 'High') { season = 'Deep Autumn'; sub = 'Warm · Muted-Rich · High Contrast'; }
+    else { season = 'True Autumn'; sub = 'Warm · Muted · Medium Contrast'; }
+  } else if (!warm && !isDeepFamily) {
+    // Summer family: cool + light
+    if (clarityBucket === 'Soft') { season = 'Soft Summer'; sub = 'Cool · Muted · Soft'; }
+    else if (contrastBucket !== 'Low') { season = 'Cool Summer'; sub = 'Cool · True · Medium Contrast'; }
+    else { season = 'Light Summer'; sub = 'Cool · Muted · Low Contrast'; }
+  } else {
+    // Winter family: cool + medium/deep
+    if (clarityBucket === 'Clear') { season = 'Clear Winter'; sub = 'Cool · Clear · High Contrast'; }
+    else if (depthBucket === 'Deep' && contrastBucket === 'High') { season = 'Deep Winter'; sub = 'Cool · Clear · High Contrast'; }
+    else { season = 'True Winter'; sub = 'Cool · True · High Contrast'; }
+  }
+
   return {
     season, sub,
     undertone: warm ? 'Warm Golden' : 'Cool',
-    contrast: highC ? 'High' : contrast > 30 ? 'Medium' : 'Low',
-    depth: deep ? 'Deep' : sb < 200 ? 'Medium' : 'Light',
+    contrast: contrastBucket,
+    clarity: clarityBucket,
+    depth: depthBucket,
     warm,
+    skinHue: sHsl.h,
     palette: paletteFor(season)
   };
 }
 
-// 12-hue colour wheel, split into the warm half (reds/oranges/yellows) and
-// cool half (greens/blues/violets) that seasonal colour theory is built on.
-// Your season's half is outlined; the rest fades back so it reads at a glance.
-const WARM_HUES = new Set([330, 0, 30, 60, 90]);
-function colorWheelSVG(warm) {
-  const cx = 70, cy = 70, rOuter = 62, rInner = 30;
+// Shows the full 12-hue wheel for orientation, plus two things that are
+// specific and real: a dashed line at the actual warm/cool skin-tone
+// threshold this tool uses (not the generic half-wheel split - see
+// isWarmSkinTone above for why), and a marker pin at your photo's actual
+// measured skin hue angle, so this is a real plotted point, not a vague
+// "your half is highlighted" illustration.
+function colorWheelSVG(warm, skinHue) {
+  const cx = 70, cy = 70, rOuter = 62, rInner = 30, rMarker = 46;
   const toRad = d => (d - 90) * Math.PI / 180;
   const point = (r, deg) => [cx + r * Math.cos(toRad(deg)), cy + r * Math.sin(toRad(deg))];
   let wedges = '';
   for (let h = 0; h < 360; h += 30) {
-    const isWarmWedge = WARM_HUES.has(h);
-    const active = isWarmWedge === warm;
     const [x1, y1] = point(rOuter, h), [x2, y2] = point(rOuter, h + 30);
     const [x3, y3] = point(rInner, h + 30), [x4, y4] = point(rInner, h);
     const path = `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 0 1 ${x2} ${y2} L ${x3} ${y3} A ${rInner} ${rInner} 0 0 0 ${x4} ${y4} Z`;
-    wedges += `<path d="${path}" fill="hsl(${h},70%,55%)" opacity="${active ? 1 : 0.22}" stroke="#fff" stroke-width="1.5"/>`;
+    wedges += `<path d="${path}" fill="hsl(${h},70%,55%)" stroke="#fff" stroke-width="1.5"/>`;
   }
+  // the real warm/cool boundary line (SKIN_HUE_THRESHOLD and its mirror)
+  const [bx1, by1] = point(rOuter + 4, SKIN_HUE_THRESHOLD);
+  const [bx2, by2] = point(rOuter + 4, SKIN_HUE_THRESHOLD + 180);
+  const boundaryLine = `<line x1="${bx1}" y1="${by1}" x2="${bx2}" y2="${by2}" stroke="#333" stroke-width="1.5" stroke-dasharray="3,2"/>`;
+  // the marker pin at the actual measured hue
+  const [mx, my] = point(rMarker, skinHue);
+  const marker = `<circle cx="${mx}" cy="${my}" r="6" fill="#fff" stroke="#1B1130" stroke-width="2.5"/>`;
   const label = warm ? 'WARM' : 'COOL';
-  return `<svg viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="Colour wheel, ${label.toLowerCase()} half highlighted">
+  return `<svg viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="Colour wheel with your measured hue (${Math.round(skinHue)} degrees) marked, ${label.toLowerCase()} side">
     ${wedges}
+    ${boundaryLine}
+    ${marker}
     <circle cx="${cx}" cy="${cy}" r="${rInner - 2}" fill="#fff"/>
     <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="12" font-weight="800" fill="#333">${label}</text>
   </svg>`;
@@ -157,8 +221,8 @@ function colorWheelSVG(warm) {
 
 function seasonExplainer(a) {
   const warmText = a.warm
-    ? 'your undertone sits on the warm half of the wheel (reds, oranges and golden yellows) rather than the cool half (blues, greens and violets)'
-    : 'your undertone sits on the cool half of the wheel (blues, greens and violets) rather than the warm half (reds, oranges and golden yellows)';
+    ? `your skin's actual measured hue (${Math.round(a.skinHue)}° on the wheel, marked above) sits on the golden-orange-yellow side of where skin tones split warm from cool, rather than the rosier red-pink side`
+    : `your skin's actual measured hue (${Math.round(a.skinHue)}° on the wheel, marked above) sits on the rosier red-pink side of where skin tones split warm from cool, rather than the golden-orange-yellow side`;
   const contrastText = {
     High: 'your skin and hair are far apart in brightness, so bold, clear colours and strong combinations (like a deep neutral with a bright accent) read as flattering rather than harsh',
     Medium: 'your skin and hair sit a medium distance apart in brightness, so moderately rich, blended colours work better than either pastels or stark high-contrast pairings',
@@ -169,7 +233,12 @@ function seasonExplainer(a) {
     Medium: 'your overall colouring sits in the mid-range between light and deep, giving you flexibility toward both richer and lighter shades within your warm/cool family',
     Light: 'your overall colouring reads as light rather than deep, so softer, lighter shades stay in proportion instead of overwhelming your natural colouring'
   }[a.depth];
-  return `You're a <strong>${a.season}</strong> (${a.sub}). In plain terms: ${warmText}; ${contrastText}; and ${depthText}. Every colour below is chosen for sitting on your side of the wheel at a depth and contrast that match how you actually look — that's the whole idea behind seasonal colour theory: find the colours whose warmth, depth and contrast echo your own, rather than picking "nice colours" at random. A colour that's technically pretty can still fight your natural colouring if it's the wrong temperature or the wrong depth for you; a colour that looks plain on its own can look great once it's matched to your wheel position.`;
+  const clarityText = {
+    Clear: 'your colouring has high saturation — distance from grey on the wheel — so bright, clean, high-impact colours look vivid on you rather than costume-y',
+    Soft: 'your colouring has low saturation — closer to the grey centre of the wheel — so muted, dusty, blended colours look rich on you where bright primaries would look like they\'re wearing you',
+    True: 'your colouring sits at a moderate saturation, neither especially muted nor especially vivid, which is what pulls your palette toward balanced, true mid-tone colours rather than either extreme'
+  }[a.clarity];
+  return `You're a <strong>${a.season}</strong> (${a.sub}). In plain terms: ${warmText}; ${contrastText}; ${depthText}; and ${clarityText}. Every colour below is chosen for sitting on your side of the wheel at a hue, depth and saturation that match how you actually look — that's the whole idea behind seasonal colour theory: find the colours whose warmth, depth and clarity echo your own, rather than picking "nice colours" at random. A colour that's technically pretty can still fight your natural colouring if it's the wrong temperature, depth or saturation for you; a colour that looks plain on its own can look great once it's matched to your wheel position.`;
 }
 
 // Celebrities commonly cited for each season in seasonal-colour-analysis
@@ -183,10 +252,16 @@ const SEASON_CELEBRITIES = {
   'Deep Winter': ['Anne Hathaway', 'Lucy Liu'],
   'Light Summer': ['Reese Witherspoon', 'Cameron Diaz'],
   'True Autumn': ['Jessica Chastain', 'Julianne Moore'],
-  'True Winter': ['Megan Fox', 'Liv Tyler']
+  'True Winter': ['Megan Fox', 'Liv Tyler'],
+  'Light Spring': ['Margot Robbie', 'Emma Stone'],
+  'Clear Spring': ['Zendaya', 'Priyanka Chopra'],
+  'Soft Autumn': ['Jennifer Aniston', 'Drew Barrymore'],
+  'Clear Winter': ['Kim Kardashian', 'Dita Von Teese'],
+  'Cool Summer': ['Charlize Theron', 'Emily Blunt'],
+  'Soft Summer': ['Kate Middleton', 'Jennifer Garner']
 };
 
-const ACCURACY_NOTE = "How accurate is this: this tool estimates your season from the average pixel colour of two small regions of your photo (a patch of skin, a patch of hair) — it's a genuine, real measurement of your actual photo, not a random guess, but it's a simple heuristic, not professional colour draping under controlled lighting. Your photo's white balance, lighting colour and camera processing all shift the numbers, which is why the tips above (natural daylight, no filters, neutral top) matter: they're not just nice-to-haves, they're what makes the measurement trustworthy. Treat the season below as a well-reasoned starting point to experiment from, not a lab-verified diagnosis.";
+const ACCURACY_NOTE = "How accurate is this: this tool converts the average pixel colour of two small regions of your photo (skin, hair) into real HSL colour-wheel coordinates — hue (your position around the wheel, which decides warm vs cool), saturation (distance from the wheel's grey centre, which decides clear vs soft) and lightness (which decides light vs deep) — then classifies you into one of the 12 standard seasonal-colour-theory categories from those three measured values. It's a genuine, real measurement of your actual photo on the actual colour wheel, not a random guess or a coin-flip heuristic. That said, it's still a simple two-region sample, not professional colour draping under controlled studio lighting. Your photo's white balance, lighting colour and camera processing all shift the measured hue/saturation/lightness, which is why the tips above (natural daylight, no filters, neutral top) matter: they're what makes the three measurements trustworthy in the first place. Treat the season below as a well-reasoned, wheel-grounded starting point to experiment from, not a lab-verified diagnosis.";
 
 function paletteFor(season) {
   const P = {
@@ -377,6 +452,163 @@ function paletteFor(season) {
       stylingTips: 'Soft diffused',
       glasses: { best: 'Light tortoise, rose gold, silver wire', colors: [['#B87333','Rose Gold'],['#C0C0C0','Silver']], avoid: [['#000000','Black']], sunglasses: 'Light tortoise, pink-tinted', brands: 'Warby Parker, Chloé' }
     }
+,
+    "Light Spring": {
+      best: [['#f5b197','Coral'],['#eed54f','Golden Yellow'],['#d7f9d7','Fresh Green'],['#eec6a3','Peach'],['#f49f8f','Tomato'],['#d4b464','Gold'],['#4ac5be','Turquoise'],['#f9cebe','Salmon']],
+      neutrals: [['#faf5eb','Wheat'],['#e3d3bf','Burlywood'],['#958f88','Warm Taupe'],['#ffffff','Ivory']],
+      accents: [['#eed54f','Gold'],['#f5b197','Coral']],
+      avoid: [['#1f1f1f','Black'],['#9f9f9f','Grey'],['#6c11ae','Indigo'],['#ac11ac','Purple']],
+      metals: 'Light gold · Soft rose gold (never heavy)', metalPrimary: 'Gold',
+      foundation: { undertone: 'Warm, light peachy-ivory', fenty: '150-210', mac: 'NC15-25', loreal: 'W2-4', tip: 'Lightest warm shades — avoid anything deep or ashy.' },
+      blush: [['#f5b197','Coral'],['#f9cebe','Salmon']],
+      bronzer: [['#c9a480','Golden'],['#dacfc1','Tan']],
+      highlighter: [['#eed54f','Gold'],['#ffffff','Peach']],
+      eyeEveryday: [['#eec6a3','Peach'],['#c9a480','Caramel']],
+      eyeDrama: [['#4ac5be','Teal'],['#d4b464','Gold']],
+      eyeliner: [['#ad632e','Brown'],['#576565','Teal']],
+      lipEveryday: [['#f5b197','Coral'],['#f9cebe','Peach']],
+      lipBold: [['#ee7a4f','Coral Red'],['#f49f8f','Tomato']],
+      lipNude: [['#fefaf7','Peach Nude']],
+      lipProducts: 'Fenty Fairy Bomb, NARS Orgasm, MAC Peach Blossom',
+      face: 'Features vary.',
+      hair: 'Light golden blonde, strawberry blonde, soft honey.',
+      hairDirection: 'Keep it light and warm — avoid ash or jet-dark tones.',
+      cuts: 'Soft layers, wispy lob, face-framing pieces',
+      bangs: 'Wispy, soft-textured YES',
+      lengths: 'Chin to shoulder suits you best',
+      stylingTips: 'Soft beachy waves, light-catching shine',
+      glasses: { best: 'Light honey tortoise, soft gold wire, warm clear acetate', colors: [['#c9a480','Honey'],['#d4b464','Gold']], avoid: [['#1f1f1f','Black'],['#dfdfdf','Silver']], sunglasses: 'Pastel-tinted, light tortoise', brands: 'Warby Parker Reeve, Ray-Ban Erika light tortoise' }
+    },
+    "Clear Spring": {
+      best: [['#ff8a5f','Coral'],['#ffd90f','Golden Yellow'],['#a3ffa3','Fresh Green'],['#ffab64','Peach'],['#ff7056','Tomato'],['#f6b514','Gold'],['#0ed3c8','Turquoise'],['#ffab89','Salmon']],
+      neutrals: [['#fde6ba','Wheat'],['#eec187','Burlywood'],['#aa7d45','Warm Taupe'],['#fffbeb','Ivory']],
+      accents: [['#ffd90f','Gold'],['#ff8a5f','Coral']],
+      avoid: [['#090606','Black'],['#9d7272','Grey'],['#540091','Indigo'],['#8f008f','Purple']],
+      metals: 'Bright gold · Clear rose gold', metalPrimary: 'Gold',
+      foundation: { undertone: 'Warm-neutral, bright', fenty: '190-250', mac: 'NC30-37', loreal: 'W5-6', tip: 'Clear, not muddy — avoid overly yellow or ashy shades.' },
+      blush: [['#ff8a5f','Coral'],['#ffab89','Salmon']],
+      bronzer: [['#e58c37','Golden'],['#e3bd8a','Tan']],
+      highlighter: [['#ffd90f','Gold'],['#fff1dc','Peach']],
+      eyeEveryday: [['#ffab64','Peach'],['#e58c37','Caramel']],
+      eyeDrama: [['#0ed3c8','Teal'],['#f6b514','Gold']],
+      eyeliner: [['#a84905','Brown'],['#286565','Teal']],
+      lipEveryday: [['#ff8a5f','Coral'],['#ffab89','Peach']],
+      lipBold: [['#ff500f','Coral Red'],['#ff7056','Tomato']],
+      lipNude: [['#ffe2c8','Peach Nude']],
+      lipProducts: 'MAC Lady Danger, NARS Heat Wave, Fenty Unbutton',
+      face: 'Features vary.',
+      hair: 'Bright golden brown, warm chestnut with clear highlights.',
+      hairDirection: 'Bright, clean tones — avoid muted or ashy colour.',
+      cuts: 'Sleek lob, blunt bob with movement',
+      bangs: 'Blunt, face-framing YES',
+      lengths: 'Shoulder to collarbone for maximum shine',
+      stylingTips: 'High-shine serum, sleek finish',
+      glasses: { best: 'Bright tortoise, gold wire, clear acetate', colors: [['#e58c37','Honey'],['#f6b514','Gold']], avoid: [['#090606','Black'],['#d2bebe','Silver']], sunglasses: 'Mirrored warm tones, bright tortoise', brands: 'Ray-Ban Wayfarer bright tortoise, Gentle Monster' }
+    },
+    "Soft Autumn": {
+      best: [['#c67a44','Chocolate Orange'],['#898911','Olive'],['#8d542a','Saddle Brown'],['#ad8157','Copper'],['#5e694b','Dark Olive'],['#9b654c','Sienna'],['#c7a44c','Goldenrod'],['#8d712c','Dark Mustard']],
+      neutrals: [['#4b4740','Dark Taupe'],['#656362','Warm Brown'],['#b4a491','Camel'],['#f1e6d0','Wheat'],['#3c3c3c','Soft Black']],
+      accents: [['#c7a44c','Goldenrod'],['#ad8157','Copper'],['#8d542a','Saddle']],
+      avoid: [['#f190c1','Hot Pink'],['#33e6e6','Cyan'],['#ffffff','Pure White'],['#111189','Navy']],
+      metals: 'Brushed gold · Matte bronze (never shiny)', metalPrimary: 'Gold',
+      foundation: { undertone: 'Warm-muted, soft golden', fenty: '370-420', mac: 'NC40-42', loreal: 'W6-7', tip: 'Soft matte finish — shimmer reads harsh on you.' },
+      blush: [['#ba926b','Peru'],['#ad8157','Copper'],['#9b654c','Sienna']],
+      bronzer: [['#886748','Golden Bronze'],['#9b654c','Warm Brick']],
+      highlighter: [['#c7a44c','Golden'],['#ad8157','Copper']],
+      eyeEveryday: [['#d5c2a9','Burlywood'],['#8d712c','Mustard'],['#6b513f','Cocoa']],
+      eyeDrama: [['#494e4e','Dark Teal'],['#8d542a','Saddle'],['#8d712c','Rich Bronze']],
+      eyeliner: [['#352620','Brown'],['#5e694b','Olive'],['#8d542a','Rust']],
+      lipEveryday: [['#ba926b','Peru'],['#9b654c','Sienna']],
+      lipBold: [['#ad4040','Firebrick'],['#8d542a','Deep Rust']],
+      lipNude: [['#b4a491','Camel'],['#929292','Warm Nude']],
+      lipProducts: 'MAC Twig, NARS Cruella, Charlotte Tilbury Pillow Talk',
+      face: 'Features vary.',
+      hair: 'Soft chestnut, muted caramel, dirty blonde.',
+      hairDirection: 'Keep tones muted — avoid anything too bright or brassy.',
+      cuts: 'Soft layers, shag, textured lob',
+      bangs: 'Soft wispy YES',
+      lengths: 'Shoulder to mid-length',
+      stylingTips: 'Matte texturising spray, loose soft waves',
+      glasses: { best: 'Soft matte tortoise, brushed gold, muted olive acetate', colors: [['#8d542a','Honey Tortoise'],['#c7a44c','Gold'],['#ba926b','Caramel']], avoid: [['#cdcdcd','Silver'],['#0d0d0d','Jet Black']], sunglasses: 'Muted tortoise, soft brown gradient', brands: 'Warby Parker Percey, Oliver Peoples' }
+    },
+    "Clear Winter": {
+      best: [['#f00000','True Red'],['#000071','Navy'],['#ff058c','Hot Pink'],['#007171','Teal'],['#7c007c','Magenta'],['#000000','Jet Black']],
+      neutrals: [['#000000','Black'],['#f8f6f6','White'],['#705353','Grey']],
+      accents: [['#f00000','Red'],['#ff058c','Pink']],
+      avoid: [['#fbda9e','Beige'],['#883d06','Brown'],['#dea20c','Mustard']],
+      metals: 'Platinum · Bright silver (high shine)', metalPrimary: 'Silver',
+      foundation: { undertone: 'Cool, bright pink-blue', fenty: 'C-series bright', mac: 'NC/NW42-46', loreal: 'C8-9', tip: 'Needs a true, bright cool base — avoid any warmth.' },
+      blush: [['#ff058c','Hot Pink'],['#c90480','Berry']],
+      bronzer: [['#883d06','Cool Taupe']],
+      highlighter: [['#e1f1ff','Icy']],
+      eyeEveryday: [['#c3aeae','Silver'],['#8a6666','Grey']],
+      eyeDrama: [['#000071','Navy'],['#000000','Black']],
+      eyeliner: [['#000000','Black']],
+      lipEveryday: [['#f00000','True Red']],
+      lipBold: [['#ff058c','Fuchsia']],
+      lipNude: [['#fda6c4','Cool Pink Nude']],
+      lipProducts: 'MAC Ruby Woo, NARS Dragon Girl, YSL Rouge Pur Couture 1',
+      face: 'Features vary.',
+      hair: 'Jet black, icy platinum, blue-black.',
+      hairDirection: 'High contrast, cool extremes — your most dramatic colouring.',
+      cuts: 'Sharp geometric cuts, sleek bob',
+      bangs: 'Blunt, graphic YES',
+      lengths: 'Any — you can carry bold shapes',
+      stylingTips: 'Glass-hair finish, sharp precision parting',
+      glasses: { best: 'Jet black acetate, bright silver wire, clear crystal', colors: [['#000000','Black'],['#c3aeae','Silver']], avoid: [['#dea20c','Gold']], sunglasses: 'Black mirrored, icy-tinted lenses', brands: 'Celine CL40019, Saint Laurent SL1' }
+    },
+    "Cool Summer": {
+      best: [['#8faed6','Powder Blue'],['#ff8d9e','Light Pink'],['#c2c2f5','Lavender'],['#8aeaea','Pale Turquoise']],
+      neutrals: [['#e2dfdf','Soft White'],['#c2bbbb','Light Grey'],['#c7e5ff','Ice']],
+      accents: [['#8faed6','Blue'],['#c2c2f5','Lavender']],
+      avoid: [['#6a330b','Brown'],['#000000','Black'],['#d63a00','Orange']],
+      metals: 'Silver · White gold (cool and matte)', metalPrimary: 'Silver',
+      foundation: { undertone: 'Cool, rosy-neutral', fenty: '220-280 (C-series)', mac: 'NC30-37 cool', loreal: 'C4-6', tip: 'True cool-pink base — avoid any peach undertone.' },
+      blush: [['#ff8d9e','Soft Pink']],
+      bronzer: [['#cca26a','Light Cool Tan']],
+      highlighter: [['#ffc7da','Rose Pearl']],
+      eyeEveryday: [['#c2bbbb','Soft Grey'],['#c2c2f5','Lavender']],
+      eyeDrama: [['#8faed6','Dusty Blue']],
+      eyeliner: [['#595050','Soft Grey']],
+      lipEveryday: [['#ff8d9e','Soft Pink']],
+      lipBold: [['#ff40a0','Cool Rose']],
+      lipNude: [['#f793b6','Pink Nude']],
+      lipProducts: 'NARS Dolce Vita, MAC Mehr, Charlotte Tilbury Pillow Talk Medium',
+      face: 'Features vary.',
+      hair: 'Ash brown, cool taupe blonde, soft cool black.',
+      hairDirection: 'Stay cool and muted — avoid warm honey or gold tones.',
+      cuts: 'Soft bob, layered mid-length',
+      bangs: 'Soft side-swept YES',
+      lengths: 'Shoulder to mid-back',
+      stylingTips: 'Cool-toned gloss, soft waves',
+      glasses: { best: 'Cool grey tortoise, silver wire, dusty blue acetate', colors: [['#9d5f25','Rose Gold'],['#b0a7a7','Silver']], avoid: [['#000000','Black']], sunglasses: 'Grey-tinted, cool tortoise', brands: 'Ray-Ban Round Metal silver, Warby Parker Louise' }
+    },
+    "Soft Summer": {
+      best: [['#b2c0d2','Powder Blue'],['#f9b2bd','Light Pink'],['#e1e1f5','Lavender'],['#afe4e4','Pale Turquoise']],
+      neutrals: [['#f0f0f0','Soft White'],['#cecece','Light Grey'],['#e8f3fd','Ice']],
+      accents: [['#b2c0d2','Blue'],['#e1e1f5','Lavender']],
+      avoid: [['#77421d','Brown'],['#000000','Black'],['#e24b12','Orange']],
+      metals: 'Brushed silver · Matte platinum', metalPrimary: 'Silver',
+      foundation: { undertone: 'Cool-muted, soft pink-grey', fenty: '160-220', mac: 'NW20-30', loreal: 'C3-5', tip: 'Soft satin finish — avoid high shimmer or warmth.' },
+      blush: [['#f9b2bd','Soft Pink']],
+      bronzer: [['#c2ad91','Light Cool Tan']],
+      highlighter: [['#fde8ef','Rose Pearl']],
+      eyeEveryday: [['#cecece','Soft Grey'],['#e1e1f5','Lavender']],
+      eyeDrama: [['#b2c0d2','Dusty Blue']],
+      eyeliner: [['#646464','Soft Grey']],
+      lipEveryday: [['#f9b2bd','Soft Pink']],
+      lipBold: [['#f36baf','Cool Rose']],
+      lipNude: [['#f1b8cc','Pink Nude']],
+      lipProducts: 'MAC Mehr, NARS Angelika, Charlotte Tilbury Pillow Talk Original',
+      face: 'Features vary.',
+      hair: 'Soft ash brown, dove grey-blonde, muted taupe.',
+      hairDirection: 'Keep tones soft and greyed — avoid gold or brassy warmth.',
+      cuts: 'Soft layers, loose waves, textured lob',
+      bangs: 'Soft wispy YES',
+      lengths: 'Shoulder length flatters most',
+      stylingTips: 'Matte texture spray, soft diffused waves',
+      glasses: { best: 'Dove grey acetate, brushed silver, soft taupe tortoise', colors: [['#9f6f42','Rose Gold'],['#bbbbbb','Silver']], avoid: [['#000000','Black']], sunglasses: 'Soft grey-tinted, muted tortoise', brands: 'Warby Parker Haskell, Oliver Peoples Gregory Peck' }
+    }
   };
   return P[season] || P['Deep Autumn'];
 }
@@ -393,6 +625,7 @@ function renderResults(a) {
         <div class="tg"><div class="l">Undertone</div><div class="v">${a.undertone}</div></div>
         <div class="tg"><div class="l">Contrast</div><div class="v">${a.contrast}</div></div>
         <div class="tg"><div class="l">Depth</div><div class="v">${a.depth}</div></div>
+        <div class="tg"><div class="l">Clarity</div><div class="v">${a.clarity}</div></div>
       </div>
       <button class="save-btn" onclick="saveReport()">💾 Save Report</button>
     </div>
@@ -439,7 +672,7 @@ function renderResults(a) {
     <div id="t-color" class="sec">
       <div class="st">🎨 Your Colour Palette</div>
       <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-bottom:12px; padding:14px; background:var(--rose-light); border-radius:12px;">
-        <div style="flex:none;">${colorWheelSVG(a.warm)}</div>
+        <div style="flex:none;">${colorWheelSVG(a.warm, a.skinHue)}</div>
         <p style="flex:1; min-width:180px; font-size:13px; color:#444; line-height:1.6; margin:0;">${seasonExplainer(a)}</p>
       </div>
       <div style="padding:12px 14px; background:var(--cream); border-radius:12px; margin-bottom:12px; border:1px solid #e8dcc9;">
